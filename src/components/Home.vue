@@ -3,7 +3,7 @@
     <v-app-bar color="deep-purple" dark>
       <v-app-bar-nav-icon @click="drawer = true"></v-app-bar-nav-icon>
 
-      <v-toolbar-title>Title</v-toolbar-title>
+      <v-toolbar-title>Información de atenciones medicas</v-toolbar-title>
     </v-app-bar>
 
     <v-navigation-drawer v-model="drawer" absolute temporary>
@@ -30,40 +30,86 @@
     </v-navigation-drawer>
     <v-form ref="form" v-model="valid" lazy-validation>
       <v-container>
-        <v-row>
+        <!-- <v-row>
           <v-col cols="12" md="4">
             <v-text-field
-              v-model="name"
-              :counter="10"
+              v-model="nameCompleted"
               label="Nombre"
+              :rules="[(v) => !!v || 'Este campo es requerido']"
               required
             ></v-text-field>
           </v-col>
-        </v-row>
-        <v-col cols="6">
+        </v-row> -->
+        <v-col cols="3">
           <v-row>
-            <v-text-field
-              class="pr-2"
-              v-model="startDate"
-              label="Fecha de inicio"
-              required
-            ></v-text-field>
-            <v-text-field
-              class="pr-2"
-              v-model="endDate"
-              label="Fecha de fin"
-              required
-            ></v-text-field>
+            <v-menu
+              ref="menu"
+              v-model="menu"
+              :close-on-content-click="false"
+              :nudge-right="40"
+              transition="scale-transition"
+              offset-y
+              max-width="290px"
+              min-width="290px"
+            >
+              <template v-slot:activator="{ on }">
+                <v-text-field
+                  v-model="startDate"
+                  label="Fecha de Inicio"
+                  hint="YYYY-MM-DD formato"
+                  persistent-hint
+                  lenguaje="es"
+                  v-on="on"
+                ></v-text-field>
+              </template>
+              <v-date-picker
+                v-model="startDate"
+                no-title
+                locale="es-es"
+                @input="menu = false"
+              ></v-date-picker>
+            </v-menu>
+            <v-spacer></v-spacer>
+            <v-menu
+              ref="menu1"
+              v-model="menu1"
+              :close-on-content-click="false"
+              :nudge-right="40"
+              transition="scale-transition"
+              offset-y
+              max-width="290px"
+              min-width="290px"
+            >
+              <template v-slot:activator="{ on }">
+                <v-text-field
+                  v-model="endDate"
+                  label="Fecha de Fin"
+                  hint="YYYY-MM-DD formato"
+                  persistent-hint
+                  v-on="on"
+                ></v-text-field>
+              </template>
+              <v-date-picker
+                v-model="endDate"
+                no-title
+                locale="es-es"
+                @input="menu1 = false"
+              ></v-date-picker>
+            </v-menu>
+          </v-row>
+        </v-col>
+        <!-- <v-col cols="4">
+          <v-row aling="start">
             <v-select
               class="pr-2"
               v-model="select"
-              :items="items"
+              :items="companyInfo"
               :rules="[(v) => !!v || 'seleccionar una empresa']"
               label="Selecciona Empresa"
               required
             ></v-select>
           </v-row>
-        </v-col>
+        </v-col> -->
       </v-container>
       <v-container>
         <v-col cols="6">
@@ -72,7 +118,7 @@
               :disabled="!valid"
               color="success"
               class="mr-4"
-              @click="validate"
+              @click="validateWithGetInformation"
             >
               Buscar
             </v-btn>
@@ -83,10 +129,48 @@
     </v-form>
     <v-data-table
       :headers="headers"
-      :items="data"
+      :items="dataInfo"
       :items-per-page="15"
       class="elevation-1"
-    ></v-data-table>
+      item-key="name"
+      :search="search"
+      :custom-filter="filterOnlyCapsText"
+    >
+      <template v-slot:items="props">
+        <td>{{ props.item.codigo }}</td>
+        <td>{{ props.item.fecha }}</td>
+        <td>{{ props.item.empresa }}</td>
+        <td>{{ props.item.subcontrata }}</td>
+        <td>{{ props.item.proyecto }}</td>
+        <td>{{ props.item.tExam }}</td>
+        <td>{{ props.item.paciente }}</td>
+        <td>{{ props.item.certificado }}</td>
+        <td>{{ props.item.certificadoDownloaded }}</td>
+        <td>{{ props.item.imp }}</td>
+        <td>{{ props.item.impDownloaded }}</td>
+        <td>{{ props.item.fechaDownloaded }}</td>
+      </template>
+      <template #item.certificado="{ value }">
+        <a target="_blank" @click="getDownload(value)">
+          {{ value }}
+        </a>
+      </template>
+      <template #item.imp="{ value }">
+        <a target="_blank" @click="getDownload(value)">
+          {{ value }}
+        </a>
+      </template>
+      <template v-slot:top>
+        <v-text-field
+          v-model="search"
+          label="Buscar (Solo Mayusculas)"
+          class="mx-4"
+        ></v-text-field>
+      </template>
+      <!-- <template v-slot:no-data>
+        <v-btn color="primary" @click="initialize">Reset</v-btn>
+      </template> -->
+    </v-data-table>
   </v-card>
 </template>
 <script>
@@ -95,8 +179,9 @@ export default {
   data() {
     return {
       select: null,
-      items: ["Company 1", "Company 2"],
       valid: false,
+      search: "",
+      nameCompleted: "",
       name: "",
       startDate: "",
       endDate: "",
@@ -116,62 +201,219 @@ export default {
         { text: "Empresa", value: "empresa" },
         { text: "SubContrata", value: "subcontrata" },
         { text: "Proyecto", value: "proyecto" },
-        { text: "T_Exam", value: "t_exam" },
+        { text: "T_Exam", value: "tExam" },
         { text: "Paciente", value: "paciente" },
         { text: "Certificado", value: "certificado" },
-        { text: "Certificado_downloaded", value: "certificado_downloaded" },
+        { text: "Certificado_downloaded", value: "certificadoDownloaded" },
         { text: "Imp", value: "imp" },
-        { text: "Imp_downloaded", value: "imp_downloaded" },
+        { text: "Imp_downloaded", value: "impDownloaded" },
+        { text: "fecha_downloaded", value: "fechaDownloaded" },
       ],
 
-      data: [],
       dataShow: 15,
 
       drawer: false,
       group: null,
-
-      mounted() {
-        axios
-          .get(process.env.URL_ENDPOINT + "/doktuz")
-          .then((response) => (this.data = response.data))
-          .catch((error) => {
-            console.log(error);
-          });
-      },
+      dataInfo: [],
+      companyInfo: [],
+      menu: false,
+      menu1: false,
     };
   },
-   created() {
-    this.getData();
+  mounted() {
+    this.getLearningData();
+    this.getCompanysData();
   },
   methods: {
+    forceFileDownload(response, item) {
+      var headers = response.headers;
+      var blob = new Blob([response.data], { type: headers["content-type"] });
+      var link = document.createElement("a");
+      link.href = window.URL.createObjectURL(blob);
+      link.download = item;
+      link.click();
+      link.remove();
+    },
+    getDownload(item) {
+      console.log("ingreso: " + item);
+      console.log("Ingreso: getDownload");
+
+      this.error = null;
+      console.log();
+      const axiosInstance = axios.create({
+        timeout: 10000,
+        responseType: "blob",
+      });
+      axiosInstance
+        .get("http://138.197.103.244/Api/v1/doktuz/file/" + item)
+        .then((response) => {
+          this.forceFileDownload(response, item);
+        })
+        .catch((error) => {
+          this.error = error.toString();
+          console.log("Error on retriving file: " + error);
+        });
+    },
+    validateWithGetInformation() {
+      if (this.nameCompleted) {
+        console.log("entro: " + this.nameCompleted + "getWithNamed");
+        this.getWithNamed();
+      } else if (this.startDate && this.endDate) {
+        console.log(
+          "entro: " + this.startDate + this.endDate + "getRangeWithDate"
+        );
+        this.getRangeWithDate();
+      } else if (this.select) {
+        console.log("entro: " + this.select + "getWithCompany");
+        this.getWithCompany();
+      } else {
+        console.log("entro: " + "getLearningData");
+        this.getLearningData();
+      }
+    },
+    filterOnlyCapsText(value, search) {
+      return (
+        value != null &&
+        search != null &&
+        typeof value === "string" &&
+        value.toString().toLocaleUpperCase().indexOf(search) !== -1
+      );
+    },
+    getWithNamed() {
+      this.error = null;
+      console.log();
+      const axiosInstance = axios.create({
+        timeout: 10000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      axiosInstance
+        .get(
+          "http://138.197.103.244/Api/v1/doktuz/allWithNameOrCompany/" +
+            this.nameCompleted.toUpperCase() +
+            "&" +
+            "none"
+        )
+        .then((response) => {
+          console.log(response.data);
+          this.dataInfo = response.data.data;
+        })
+        .catch((error) => {
+          this.error = error.toString();
+          console.log("Error on retriving articles: " + error);
+        });
+    },
+    getWithCompany() {
+      this.error = null;
+      console.log();
+      const axiosInstance = axios.create({
+        timeout: 10000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      axiosInstance
+        .get(
+          "http://138.197.103.244/Api/v1/doktuz/allWithNameOrCompany/" +
+            "none" +
+            "&" +
+            this.select
+        )
+        .then((response) => {
+          console.log(response.data);
+          this.dataInfo = response.data.data;
+        })
+        .catch((error) => {
+          this.error = error.toString();
+          console.log("Error on retriving articles: " + error);
+        });
+    },
+    getRangeWithDate() {
+      this.error = null;
+      console.log();
+      const axiosInstance = axios.create({
+        timeout: 10000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      axiosInstance
+        .get(
+          "http://138.197.103.244/Api/v1/doktuz/allWithRangeDate/" +
+            this.startDate +
+            "&" +
+            this.endDate
+        )
+        .then((response) => {
+          console.log(response.data);
+          this.dataInfo = response.data.data;
+        })
+        .catch((error) => {
+          this.error = error.toString();
+          console.log("Error on retriving articles: " + error);
+        });
+    },
+
     validate() {
       this.$refs.form.validate();
     },
     reset() {
       this.$refs.form.reset();
     },
-     getData() {
+    getLearningData() {
       this.error = null;
-      const axiosInstance = axios.create({        
+      const axiosInstance = axios.create({
         timeout: 10000,
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
         },
       });
       axiosInstance
-        .get("http://localhost:3000/doktuz")
-        //On success save response in articles variable
-        .then(response => {
-          this.data = response.data;
-          console.log("Articles found: ", response.data);
+        .get("http://138.197.103.244/Api/v1/doktuz")
+        .then((response) => {
+          this.dataInfo = [];
+          this.dataInfo = response.data.data;
         })
-        //Catch and display any errors
-        .catch(error => {
+        .catch((error) => {
           this.error = error.toString();
           console.log("Error on retriving articles: " + error);
         });
-    }
+    },
+
+    getCompanysData() {
+      this.error = null;
+      const axiosInstance = axios.create({
+        timeout: 10000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      axiosInstance
+        .get("http://138.197.103.244/Api/v1/doktuz/allCompanys")
+        .then((response) => {
+          this.companyInfo = response.data.companys;
+        })
+        .catch((error) => {
+          this.error = error.toString();
+          console.log("Error on retriving articles: " + error);
+        });
+    },
+    formatDate(date) {
+      if (!date) return null;
+
+      const [year, month, day] = date.split("-");
+      return `${year}-${month}-${day}`;
+    },
+    parseDate(date) {
+      if (!date) return null;
+
+      const [month, day, year] = date.split("/");
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    },
   },
 };
 </script>
